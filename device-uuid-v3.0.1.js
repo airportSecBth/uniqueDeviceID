@@ -1,3 +1,12 @@
+/*!
+ * device-uuid.js v1.0.4 (https://github.com/biggora/device-uuid/)
+ * Copyright 2016-2017 Alexey Gordeyev
+ * Licensed under MIT (https://github.com/biggora/device-uuid/blob/master/LICENSE)
+ */
+/*global
+ screen, window, navigator
+ */
+
 var DeviceUUIDModule = (function (exports) {
   'use strict';
 
