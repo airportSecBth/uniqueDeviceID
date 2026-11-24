@@ -1,12 +1,3 @@
-/*!
- * device-uuid.js v3.0.1 (https://github.com/biggora/device-uuid/)
- * Copyright 2016-2017 Alexey Gordeyev
- * Licensed under MIT (https://github.com/biggora/device-uuid/blob/master/LICENSE)
- */
-/*global
- screen, window, navigator
- */
-
 var DeviceUUIDModule = (function (exports) {
   'use strict';
 
@@ -72,7 +63,7 @@ var DeviceUUIDModule = (function (exports) {
     UC: /UCBrowser/i
   };
   var OS_PATTERNS = {
-    Windows11: /windows nt 10\.0.*(?:; win64; x64|; wow64).*(?:rv:|edg\/|chrome\/).*?(\d+)/i,
+    Windows11: /windows nt 10\.0/i,
     Windows10: /windows nt 10\.0/i,
     Windows81: /windows nt 6\.3/i,
     Windows8: /windows nt 6\.2/i,
@@ -111,8 +102,8 @@ var DeviceUUIDModule = (function (exports) {
     Wii: /wii/i,
     PS3: /playstation 3/i,
     PSP: /playstation portable/i,
-    iPad: /\(iPad.*os (\d+)[._](\d+)/i,
-    iPhone: /\(iPhone.*os (\d+)[._](\d+)/i,
+    iPad: /\(ipad\b/i,
+    iPhone: /\(iphone\b/i,
     Bada: /Bada\/(\d+)\.(\d+)/i,
     Curl: /curl\/(\d+)\.(\d+)\.(\d+)/i
   };
@@ -291,7 +282,7 @@ var DeviceUUIDModule = (function (exports) {
     const numberOfWordsTemp2 = (numberOfWordsTemp1 - numberOfWordsTemp1 % 64) / 64;
     const numberOfWords = (numberOfWordsTemp2 + 1) * 16;
     const wordArray = new Array(numberOfWords - 1);
-    let bytePosition = 0;
+    let bytePosition;
     let byteCount = 0;
     while (byteCount < messageLength) {
       const wordCount2 = (byteCount - byteCount % 4) / 4;
@@ -308,10 +299,9 @@ var DeviceUUIDModule = (function (exports) {
   };
   var wordToHex = (value) => {
     let wordToHexValue = "";
-    let wordToHexValueTemp = "";
     for (let count = 0; count <= 3; count++) {
       const byte = value >>> count * 8 & 255;
-      wordToHexValueTemp = "0" + byte.toString(16);
+      const wordToHexValueTemp = "0" + byte.toString(16);
       wordToHexValue = wordToHexValue + wordToHexValueTemp.substr(wordToHexValueTemp.length - 2, 2);
     }
     return wordToHexValue;
@@ -1489,18 +1479,47 @@ var DeviceUUIDModule = (function (exports) {
       return "unknown";
     }
     /**
+     * Read a decimal integer at a known offset without applying an unbounded regex
+     * to the whole user-agent string.
+     */
+    readLeadingInteger(source, start) {
+      let end = start;
+      while (end < source.length) {
+        const code = source.charCodeAt(end);
+        if (code < 48 || code > 57) break;
+        end++;
+      }
+      if (end === start) return null;
+      return Number.parseInt(source.slice(start, end), 10);
+    }
+    getWindows11BrowserMajorVersion(source) {
+      const lowerSource = source.toLowerCase();
+      if (!lowerSource.includes("windows nt 10.0")) return null;
+      if (!lowerSource.includes("; win64; x64") && !lowerSource.includes("; wow64")) return null;
+      for (const marker of ["rv:", "edg/", "chrome/"]) {
+        const markerIndex = lowerSource.indexOf(marker);
+        if (markerIndex === -1) continue;
+        const version = this.readLeadingInteger(source, markerIndex + marker.length);
+        if (version !== null) return version;
+      }
+      return null;
+    }
+    hasIOSDeviceOS(source, device) {
+      const lowerSource = source.toLowerCase();
+      const start = lowerSource.indexOf(`(${device}`);
+      if (start === -1) return false;
+      const end = lowerSource.indexOf(")", start);
+      const deviceSection = lowerSource.slice(start, end === -1 ? lowerSource.length : end);
+      return deviceSection.includes(" os ") || deviceSection.includes(` ${device} os `);
+    }
+    /**
      * Get operating system from user agent string
      */
     getOS(source) {
-      if (this.osPatterns.Windows11.test(source)) {
-        const match = source.match(this.osPatterns.Windows11);
-        if (match && match[1]) {
-          const version = parseInt(match[1]);
-          if (version >= 96) {
-            this.agent.isWindows = true;
-            return "Windows 11";
-          }
-        }
+      const windows11BrowserMajorVersion = this.getWindows11BrowserMajorVersion(source);
+      if (windows11BrowserMajorVersion !== null && windows11BrowserMajorVersion >= 96) {
+        this.agent.isWindows = true;
+        return "Windows 11";
       }
       if (this.osPatterns.Windows10.test(source)) {
         this.agent.isWindows = true;
@@ -1643,11 +1662,11 @@ var DeviceUUIDModule = (function (exports) {
         this.agent.isMac = true;
         return "macOS Sequoia";
       }
-      if (this.osPatterns.iPad.test(source)) {
+      if (this.hasIOSDeviceOS(source, "ipad")) {
         this.agent.isiPad = true;
         return "iOS";
       }
-      if (this.osPatterns.iPhone.test(source)) {
+      if (this.hasIOSDeviceOS(source, "iphone")) {
         this.agent.isiPhone = true;
         return "iOS";
       }
@@ -1911,7 +1930,7 @@ var DeviceUUIDModule = (function (exports) {
     parse(source) {
       const ua = new _DeviceUUID();
       const userAgent = source || getUserAgent();
-      ua.agent.source = userAgent.replace(/^\s*/, "").replace(/\s*$/, "");
+      ua.agent.source = userAgent.trim();
       ua.agent.os = ua.getOS(ua.agent.source);
       ua.agent.platform = ua.getPlatform(ua.agent.source);
       ua.agent.browser = ua.getBrowser(ua.agent.source);
@@ -1998,6 +2017,8 @@ var DeviceUUIDModule = (function (exports) {
       const tasks = [];
       if (resolvedOptions.canvas) {
         totalCount++;
+        const hashIndex = hashes.length;
+        hashes.push(null);
         tasks.push(
           (async () => {
             const { result, duration } = await measureAsync(
@@ -2010,7 +2031,7 @@ var DeviceUUIDModule = (function (exports) {
               duration
             };
             if (result) {
-              hashes.push(result);
+              hashes[hashIndex] = result;
               successCount++;
             }
           })()
@@ -2018,6 +2039,8 @@ var DeviceUUIDModule = (function (exports) {
       }
       if (resolvedOptions.webgl) {
         totalCount++;
+        const hashIndex = hashes.length;
+        hashes.push(null);
         tasks.push(
           (async () => {
             const { result, duration } = await measureAsync(
@@ -2030,7 +2053,7 @@ var DeviceUUIDModule = (function (exports) {
               duration
             };
             if (result) {
-              hashes.push(result);
+              hashes[hashIndex] = result;
               successCount++;
             }
           })()
@@ -2038,6 +2061,8 @@ var DeviceUUIDModule = (function (exports) {
       }
       if (resolvedOptions.audio) {
         totalCount++;
+        const hashIndex = hashes.length;
+        hashes.push(null);
         tasks.push(
           (async () => {
             const { result, duration } = await measureAsync(
@@ -2050,7 +2075,7 @@ var DeviceUUIDModule = (function (exports) {
               duration
             };
             if (result) {
-              hashes.push(result);
+              hashes[hashIndex] = result;
               successCount++;
             }
           })()
@@ -2058,6 +2083,8 @@ var DeviceUUIDModule = (function (exports) {
       }
       if (resolvedOptions.fonts) {
         totalCount++;
+        const hashIndex = hashes.length;
+        hashes.push(null);
         const fontList = Array.isArray(resolvedOptions.fonts) ? resolvedOptions.fonts : void 0;
         tasks.push(
           (async () => {
@@ -2071,7 +2098,7 @@ var DeviceUUIDModule = (function (exports) {
               duration
             };
             if (result) {
-              hashes.push(result);
+              hashes[hashIndex] = result;
               successCount++;
             }
           })()
@@ -2079,6 +2106,8 @@ var DeviceUUIDModule = (function (exports) {
       }
       if (resolvedOptions.mediaDevices) {
         totalCount++;
+        const hashIndex = hashes.length;
+        hashes.push(null);
         tasks.push(
           (async () => {
             const { result, duration } = await measureAsync(() => this.getMediaDevicesHash());
@@ -2089,7 +2118,7 @@ var DeviceUUIDModule = (function (exports) {
               duration
             };
             if (result) {
-              hashes.push(result);
+              hashes[hashIndex] = result;
               successCount++;
             }
           })()
@@ -2097,6 +2126,8 @@ var DeviceUUIDModule = (function (exports) {
       }
       if (resolvedOptions.networkInfo) {
         totalCount++;
+        const hashIndex = hashes.length;
+        hashes.push(null);
         const { result, duration } = await measureAsync(
           () => Promise.resolve(this.getNetworkInfoHash())
         );
@@ -2107,12 +2138,14 @@ var DeviceUUIDModule = (function (exports) {
           duration
         };
         if (result) {
-          hashes.push(result);
+          hashes[hashIndex] = result;
           successCount++;
         }
       }
       if (resolvedOptions.timezone) {
         totalCount++;
+        const hashIndex = hashes.length;
+        hashes.push(null);
         const { result, duration } = await measureAsync(
           () => Promise.resolve(this.getTimezoneHash())
         );
@@ -2123,12 +2156,14 @@ var DeviceUUIDModule = (function (exports) {
           duration
         };
         if (result) {
-          hashes.push(result);
+          hashes[hashIndex] = result;
           successCount++;
         }
       }
       if (resolvedOptions.incognitoDetection) {
         totalCount++;
+        const hashIndex = hashes.length;
+        hashes.push(null);
         tasks.push(
           (async () => {
             const { result, duration } = await measureAsync(() => this.detectIncognito());
@@ -2139,7 +2174,7 @@ var DeviceUUIDModule = (function (exports) {
               duration
             };
             if (result) {
-              hashes.push(result);
+              hashes[hashIndex] = result;
               successCount++;
             }
           })()
